@@ -142,41 +142,37 @@ INSERT INTO Animales (id_animal, nombre, especie, edad, propietario_nombre, prop
 
 
 
-
--- La tabla  técnicamente ya está normalizada hasta la 3FN, pero podemos descomponer la tabla en algunas más pequeñas para ahorrar espacio
--- y darle más importancia a algunos atributos.
-
--- Creamos las nuevas tablas
 create table directores (
-    id INT auto_increment primary key,
+    director_id INT auto_increment primary key,
     nombre VARCHAR(255) not null 
 );
 
-create table actores_ppales (
-    id INT auto_increment primary key,
-    nombre VARCHAR(255) not null 
-);
-
-create table actores_secundarios (
-    id INT auto_increment primary key,
+create table actores (
+    actor_id INT auto_increment primary key,
     nombre VARCHAR(255) not null 
 );
 
 create table generos (
-    id INT auto_increment primary key,
+    genero_id INT auto_increment primary key,
     nombre VARCHAR(255) not null 
 );
 
--- Insertamos los datos desde Peliculas
+create table peliculas_actores (
+	id_pelicula INT,
+	id_actor INT,
+	primary key (id_pelicula, id_actor),
+	foreign key (id_pelicula) references peliculas(id_pelicula),
+	foreign key (id_actor) references actores(actor_id)
+);
+
 insert into directores (nombre)
 select distinct director
 from peliculas;
 
-insert into actores_ppales (nombre)
+insert into actores (nombre)
 select distinct actor_principal
 from peliculas;
-
-insert into actores_secundarios (nombre)
+insert into actores (nombre)
 select distinct actor_secundario
 from peliculas;
 
@@ -184,34 +180,34 @@ insert into generos (nombre)
 select distinct genero
 from peliculas;
 
--- Cambiamos en Peliculas los nombres por la id de la nueva tabla
 alter table peliculas 
 add column director_id INT,
-add column actor_ppal_id INT,
-add column actor_secundario_id INT,
 add column genero_id INT;
 
--- Actualizamos peliculas para establecer la nueva relación
 update peliculas
-set director_id = (select id from directores where nombre = peliculas.director),
-    actor_ppal_id = (select id from actores_ppales where nombre = peliculas.actor_principal),
-    actor_secundario_id = (select id from actores_secundarios where nombre = peliculas.actor_secundario),
-    genero_id = (select id from generos where nombre = peliculas.genero);
+set director_id = (select director_id from directores where nombre = peliculas.director),
+    genero_id = (select genero_id from generos where nombre = peliculas.genero);
 
--- Eliminamos las columnas antiguas
 alter table peliculas 
 drop column director,
-drop column actor_principal,
-drop column actor_secundario,
 drop column genero;
 
--- Añadimos clave foránea
 alter table peliculas 
-add constraint fk_director foreign key (director_id) references directores(id),
-add constraint fk_actor_ppal foreign key (actor_ppal_id) references actores_ppales(id),
-add constraint fk_actor_secundario foreign key (actor_secundario_id) references actores_secundarios(id),
-add constraint fk_genero foreign key (genero_id) references generos(id);
+add constraint fk_director foreign key (director_id) references directores(director_id),
+add constraint fk_genero foreign key (genero_id) references generos(genero_id);
 
+insert into peliculas_actores (id_pelicula, id_actor)
+select p.id_pelicula, a.actor_id
+from peliculas p
+join actores a where p.actor_principal = a.nombre;
+insert into peliculas_actores (id_pelicula, id_actor)
+select p.id_pelicula, a.actor_id
+from peliculas p
+join actores a where p.actor_secundario = a.nombre;
+
+alter table peliculas
+drop column actor_principal,
+drop column actor_secundario;
 
 
 
@@ -221,11 +217,6 @@ add constraint fk_genero foreign key (genero_id) references generos(id);
 
 
 
-
--- Una vez más la tabla está técnicamente normalizada hasta la 3FN, pero podemos descomponer la tabla en algunas más pequeñas 
--- para que no esté toda la info amontonada en el mismo sitio, siguiendo un orden.
-
--- Creamos las nuevas tablas:
 create table propietarios (
 propietario_id INT auto_increment primary key,
 nombre VARCHAR(255) not null,
@@ -250,7 +241,6 @@ foreign key (propietario_id) references propietarios(propietario_id),
 foreign key (taller_id) references talleres(taller_id)
 );
 
--- Rellenamos las tablas con los datos de "coches":
 insert into propietarios (nombre, direccion, telefono)
 select distinct propietario_nombre, propietario_direccion, propietario_telefono
 from coches;
@@ -268,7 +258,7 @@ select
 	(select taller_id from talleres where talleres.nombre = coches.taller_nombre)
 from coches; 
 
--- Después borraríamos con un DROP la tabla coches. En este caso la voy a dejar por no eliminar por completo los datos originales.
+drop table coches;
 
 
 
@@ -279,34 +269,46 @@ from coches;
 
 
 
-
--- Una vez más la tabla está técnicamente normalizada hasta la 3FN, pero podemos sacar a los jugadores de modo que no se 
--- alargue el número de columnas innecesariamente.
-
-create table plantilla ( 
-id INT auto_increment primary key,
-jugador1 VARCHAR(255) not null,
-jugador2 VARCHAR(255) not null,
-jugador3 VARCHAR(255) not null
+create table jugadores(
+jugador_id INT auto_increment primary key,
+nombre VARCHAR(255)
 );
 
-insert into plantilla(jugador1, jugador2, jugador3)
-select distinct jugador1, jugador2, jugador3
+create table equipos_jugadores( 
+id_jugador INT,
+id_equipo INT,
+primary key (id_jugador, id_equipo),
+foreign key (id_jugador) references jugadores (jugador_id),
+foreign key (id_equipo) references equiposfutbol (id_equipo)
+);
+
+insert into jugadores(nombre)
+select distinct jugador1
+from equiposfutbol; 
+insert into jugadores(nombre)
+select distinct jugador2
+from equiposfutbol; 
+insert into jugadores(nombre)
+select distinct jugador3
 from equiposfutbol; 
 
-alter table equiposfutbol 
-add column plantilla_id INT;
-
-update equiposfutbol 
-set plantilla_id = (select id from plantilla where equiposfutbol.jugador1 = plantilla.jugador1);
+insert into equipos_jugadores (id_jugador, id_equipo)
+select j.jugador_id, ef.id_equipo
+from jugadores j
+join equiposfutbol ef where j.nombre = ef.jugador1;
+insert into equipos_jugadores (id_jugador, id_equipo)
+select j.jugador_id, ef.id_equipo
+from jugadores j
+join equiposfutbol ef where j.nombre = ef.jugador2;
+insert into equipos_jugadores (id_jugador, id_equipo)
+select j.jugador_id, ef.id_equipo
+from jugadores j
+join equiposfutbol ef where j.nombre = ef.jugador3;
 
 alter table equiposfutbol 
 drop column jugador1,
 drop column jugador2,
 drop column jugador3;
-
-alter table equiposfutbol 
-add constraint fk_plantilla foreign key (plantilla_id) references plantilla(id);
 
 
 
@@ -318,54 +320,54 @@ add constraint fk_plantilla foreign key (plantilla_id) references plantilla(id);
 
 
 
--- Una vez más la tabla está técnicamente normalizada hasta la 3FN, pero por poder, podemos dividirla en tablas más pequeñas
--- e intercomunicadas.
-
 create table artistas (
     artista_id INT auto_increment primary key,
-    artista_nombre VARCHAR(255) not null
+    nombre VARCHAR(255) not null
 );
 
 CREATE TABLE albumes (
     album_id INT auto_increment primary key,
-    album_nombre VARCHAR(255) not null,
-    artista_id INT,
-    año INT,
-    foreign key (artista_id) references artistas(artista_id)
+    nombre VARCHAR(255) not null,
+    anio_lanzamiento INT,
+    artista VARCHAR(255)
 );
 
 create table compositores (
-    compositor_id INT auto_increment primary key,
-    compositor_nombre VARCHAR(255) not null
+	compositor_id INT auto_increment primary key,
+	nombre VARCHAR(255)
 );
 
 
-CREATE TABLE canciones_normal (
-    cancion_id INT auto_increment primary key,
-    titulo VARCHAR(255) not null,
-    album_id INT,
-    duracion TIME,
-    foreign key (album_id) references albumes(album_id)
-);
 
-INSERT INTO artistas (artista_nombre)
+INSERT INTO artistas (nombre)
 SELECT DISTINCT artista
 FROM canciones;
 
-INSERT INTO compositores (compositor_nombre)
+INSERT INTO compositores (nombre)
 SELECT DISTINCT compositor
 FROM canciones;
 
-INSERT INTO albumes (album_nombre, artista_id, año)
-SELECT DISTINCT c.album, a.artista_id, c.año_lanzamiento
-FROM canciones c
-JOIN artistas a ON c.artista = a.artista_nombre;
+INSERT INTO albumes (nombre, anio_lanzamiento, artista)
+SELECT DISTINCT c.album, c.año_lanzamiento, c.artista
+FROM canciones c;
 
-INSERT INTO canciones_normal (titulo, album_id, duracion)
-SELECT c.titulo, al.album_id, c.duracion
-FROM canciones c
-JOIN albumes al ON c.album = al.album_nombre
-JOIN artistas ar ON c.artista = ar.artista_nombre AND al.artista_id = ar.artista_id;
+alter table canciones
+add column id_artista INT,
+add column id_album INT,
+add column id_compositor INT;
+
+update canciones 
+set id_artista = (select artista_id from artistas where nombre = canciones.artista),
+ 	id_album = (select album_id from albumes where nombre = canciones.album),
+ 	id_compositor = (select compositor_id from compositores where nombre = canciones.compositor);
+ 
+alter table canciones
+add constraint fk_artistas foreign key (id_artista) references artistas (artista_id),
+add constraint fk_albumes foreign key (id_album) references albumes (album_id),
+add constraint fk_compositores foreign key (id_compositor) references compositores (compositor_id),
+drop column artista,
+drop column album,
+drop column compositor;
 
 
 
@@ -374,9 +376,42 @@ JOIN artistas ar ON c.artista = ar.artista_nombre AND al.artista_id = ar.artista
 -- Ejercicio 5 
 
 
+create table propietarios_animales(
+propietario_id INT auto_increment primary key,
+nombre VARCHAR (255),
+direccion VARCHAR (255)
+);
+
+create table veterinarios(
+vet_id INT auto_increment primary key,
+nombre VARCHAR (255),
+direccion VARCHAR (255)
+);
+
+insert into propietarios_animales (nombre, direccion)
+select distinct a.propietario_nombre, a.propietario_direccion 
+from animales a;
+
+insert into veterinarios (nombre, direccion)
+select distinct a.veterinario_nombre, a.veterinario_direccion 
+from animales a;
+
+alter table animales 
+add column id_propietario INT,
+add column id_veterinario INT;
+
+update animales 
+set id_propietario = (select propietario_id from propietarios_animales where propietario_nombre = propietarios_animales.nombre),
+	id_veterinario = (select vet_id from veterinarios where veterinario_direccion = veterinarios.direccion);
 
 
+alter table animales 
+add constraint fk_propietarios foreign key (id_propietario) references propietarios_animales (propietario_id),
+add constraint fk_veterinarios foreign key (id_veterinario) references veterinarios (vet_id),
+drop column propietario_nombre,
+drop column propietario_direccion,
+drop column veterinario_nombre,
+drop column veterinario_direccion;
 
--- Podemos repetir lo que hemos hecho en el ejercicio 2
 
 
